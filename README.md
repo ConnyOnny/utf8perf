@@ -1,4 +1,4 @@
-Benchmark Rust stdlib UTF-8 parser vs (the crate utf8parse)[https://crates.io/crates/utf8parse].
+Benchmark Rust stdlib UTF-8 parser vs [the crate utf8parse](https://crates.io/crates/utf8parse).
 
 # Results
 
