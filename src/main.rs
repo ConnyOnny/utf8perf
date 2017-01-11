@@ -4,24 +4,13 @@ use utf8parse::Receiver;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::str;
 use std::time::{Duration, Instant};
 
-struct BufferReceiver {
-    data: Vec<char>,
-}
+struct Utf8Receiver;
 
-impl BufferReceiver {
-    pub fn new() -> Self {
-        BufferReceiver { data: vec![] }
-    }
-    pub fn done(self) -> Vec<char> {
-        self.data
-    }
-}
-
-impl Receiver for BufferReceiver {
-    fn codepoint(&mut self, c: char) {
-        self.data.push(c);
+impl Receiver for Utf8Receiver {
+    fn codepoint(&mut self, _c: char) {
     }
     fn invalid_sequence(&mut self) {
         panic!("This is a performance benchmark. Use only valid UTF-8");
@@ -29,45 +18,44 @@ impl Receiver for BufferReceiver {
 }
 
 trait BenchableUtf8Parser {
-    fn parse(bytes: &[u8]) -> Vec<char>;
+    fn parse(bytes: Vec<u8>) -> String;
 }
 
 struct BenchableTableParser;
 
 impl BenchableUtf8Parser for BenchableTableParser {
-    fn parse(bytes: &[u8]) -> Vec<char> {
+    fn parse(bytes: Vec<u8>) -> String {
         let mut p = utf8parse::Parser::new();
-        let mut r = BufferReceiver::new();
+        let mut r = Utf8Receiver;
         for b in bytes.iter() {
             p.advance(&mut r, *b);
         }
-        r.done()
+
+        // if we didn't panic, then utf8 is valid
+        unsafe {
+            String::from_utf8_unchecked(bytes)
+        }
     }
 }
 
 struct BenchableStdlibParser;
 
 impl BenchableUtf8Parser for BenchableStdlibParser {
-    fn parse(bytes: &[u8]) -> Vec<char> {
-        let mut ret = Vec::new();
-        let chars_it = unsafe {
-            std::str::from_utf8_unchecked(bytes).chars()
-        };
-        for c in chars_it {
-            ret.push(c);
-        }
-        ret
+    fn parse(bytes: Vec<u8>) -> String {
+        String::from_utf8(bytes).unwrap()
     }
 }
 
-fn bench1<B:BenchableUtf8Parser>(data: &[u8]) -> (Duration,usize) {
+fn bench1<B:BenchableUtf8Parser>(data: Vec<u8>) -> (Duration,usize) {
     let start = Instant::now();
     let parsed = B::parse(data);
-    (start.elapsed(),parsed.len())
+    let elapsed = start.elapsed();
+    let parsed_len = parsed.chars().count();
+    (elapsed, parsed_len)
 }
 
 fn bench<B:BenchableUtf8Parser>(name: &str, data: &[u8]) {
-    let results : Vec<(Duration,usize)> = (0..5).map(|_| bench1::<B>(data)).collect();
+    let results : Vec<(Duration,usize)> = (0..5).map(|_| bench1::<B>(data.to_owned())).collect();
     let mut times : Vec<Duration> = results.iter().map(|tup| tup.0).collect::<Vec<Duration>>();
     times.sort();
     let median_time = times[times.len()/2];
@@ -86,7 +74,7 @@ fn main() {
             let flen = input_file.read_to_end(&mut data).unwrap();
             println!("Read {} bytes.", flen);
         } // close input file
-        bench::<BenchableTableParser>("table", &data);
-        bench::<BenchableStdlibParser>("stdlib", &data);
+        bench::<BenchableTableParser>("tbl", &data);
+        bench::<BenchableStdlibParser>("std", &data);
     }
 }
