@@ -6,22 +6,19 @@ use std::fs::File;
 use std::io::Read;
 use std::time::{Duration, Instant};
 
-struct BufferReceiver {
-    data: Vec<char>,
+struct CounterReceiver {
+    ctr: usize,
 }
 
-impl BufferReceiver {
+impl CounterReceiver {
     pub fn new() -> Self {
-        BufferReceiver { data: vec![] }
-    }
-    pub fn done(self) -> Vec<char> {
-        self.data
+        CounterReceiver { ctr: 0 }
     }
 }
 
-impl Receiver for BufferReceiver {
-    fn codepoint(&mut self, c: char) {
-        self.data.push(c);
+impl Receiver for CounterReceiver {
+    fn codepoint(&mut self, _: char) {
+        self.ctr += 1;
     }
     fn invalid_sequence(&mut self) {
         panic!("This is a performance benchmark. Use only valid UTF-8");
@@ -29,41 +26,37 @@ impl Receiver for BufferReceiver {
 }
 
 trait BenchableUtf8Parser {
-    fn parse(bytes: &[u8]) -> Vec<char>;
+    fn parse(bytes: &[u8]) -> usize;
 }
 
 struct BenchableTableParser;
 
 impl BenchableUtf8Parser for BenchableTableParser {
-    fn parse(bytes: &[u8]) -> Vec<char> {
+    fn parse(bytes: &[u8]) -> usize {
         let mut p = utf8parse::Parser::new();
-        let mut r = BufferReceiver::new();
+        let mut r = CounterReceiver::new();
         for b in bytes.iter() {
             p.advance(&mut r, *b);
         }
-        r.done()
+        r.ctr
     }
 }
 
 struct BenchableStdlibParser;
 
 impl BenchableUtf8Parser for BenchableStdlibParser {
-    fn parse(bytes: &[u8]) -> Vec<char> {
-        let mut ret = Vec::new();
+    fn parse(bytes: &[u8]) -> usize {
         let chars_it = unsafe {
             std::str::from_utf8_unchecked(bytes).chars()
         };
-        for c in chars_it {
-            ret.push(c);
-        }
-        ret
+        chars_it.count()
     }
 }
 
 fn bench1<B:BenchableUtf8Parser>(data: &[u8]) -> (Duration,usize) {
     let start = Instant::now();
-    let parsed = B::parse(data);
-    (start.elapsed(),parsed.len())
+    let parsed_len = B::parse(data);
+    (start.elapsed(),parsed_len)
 }
 
 fn bench<B:BenchableUtf8Parser>(name: &str, data: &[u8]) {
@@ -86,7 +79,7 @@ fn main() {
             let flen = input_file.read_to_end(&mut data).unwrap();
             println!("Read {} bytes.", flen);
         } // close input file
-        bench::<BenchableTableParser>("table", &data);
-        bench::<BenchableStdlibParser>("stdlib", &data);
+        bench::<BenchableTableParser>("tbl", &data);
+        bench::<BenchableStdlibParser>("std", &data);
     }
 }
