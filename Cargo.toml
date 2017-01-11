@@ -1,0 +1,7 @@
+[package]
+name = "utf8perf"
+version = "0.1.0"
+authors = ["Constantin Berhard <git.mail.enormator@xoxy.net>"]
+
+[dependencies]
+utf8parse = "*"
